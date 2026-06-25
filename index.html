@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Show de Luces - Estadio</title>
+    <style>
+        body {
+            background-color: #111;
+            color: white;
+            font-family: Arial, sans-serif;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+        }
+        button {
+            background-color: #00ff66;
+            color: black;
+            border: none;
+            padding: 15px 30px;
+            font-size: 18px;
+            font-weight: bold;
+            border-radius: 25px;
+            cursor: pointer;
+            box-shadow: 0 0 15px #00ff66;
+            margin: 10px;
+        }
+        #estado {
+            margin-top: 20px;
+            color: #888;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>¡Bienvenido al Show!</h1>
+    <p>Presiona el botón para unirte a la coreografía de luces del estadio.</p>
+    
+    <button id="btn-conectar">CONECTAR MI TELÉFONO</button>
+    <div id="estado">Esperando conexión...</div>
+
+    <script src="app.js"></script>
+</body>
+</html>
