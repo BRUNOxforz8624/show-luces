@@ -43,23 +43,32 @@ BTN_CONECTAR.addEventListener('click', async () => {
 
         // Frecuencia objetivo: 18,000 Hz
         const FRECUENCIA = 18000;
+        const UMBRAL = 100;
         const indice = Math.round((FRECUENCIA * analyser.fftSize) / audioContext.sampleRate);
 
         let frameId;
+        let ultimoEstado = 0;
         function analizar() {
             analyser.getByteFrequencyData(dataArray);
             const v = dataArray[indice];
-            const detectado = v > 140;
+            const detectado = v > UMBRAL;
+
+            if (v > ultimoEstado + 5 || v < ultimoEstado - 5) {
+                ultimoEstado = v;
+            }
 
             if (detectado !== luzEncendida) {
                 luzEncendida = detectado;
                 aplicarLuz(detectado);
+                ESTADO_TXT.innerText = detectado
+                    ? "✦ SEÑAL DETECTADA ✦"
+                    : "✅ Escuchando...";
             }
 
             frameId = requestAnimationFrame(analizar);
         }
 
-        ESTADO_TXT.innerText = "✅ Esperando señal ultrasónica...";
+        ESTADO_TXT.innerText = "✅ Escuchando...";
         analizar();
 
     } catch (e) {
