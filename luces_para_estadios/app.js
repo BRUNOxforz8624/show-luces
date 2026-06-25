@@ -30,7 +30,7 @@ BTN_CONECTAR.addEventListener('click', async () => {
     // 1. Cámara trasera y linterna
     try {
         const videoStream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: { exact: "environment" } }
+            video: { facingMode: { ideal: "environment" } }
         });
         track = videoStream.getVideoTracks()[0];
         linternaFunciona = await intentarLinterna(true);
