@@ -41,8 +41,8 @@ BTN_CONECTAR.addEventListener('click', async () => {
 
         const dataArray = new Uint8Array(analyser.frequencyBinCount);
 
-        // Frecuencia objetivo: 18,000 Hz
-        const FRECUENCIA = 18000;
+        // Frecuencia desde URL (?freq=18000), default 18,000 Hz
+        const FRECUENCIA = parseInt(new URLSearchParams(location.search).get('freq')) || 18000;
         const UMBRAL = 100;
         const indice = Math.round((FRECUENCIA * analyser.fftSize) / audioContext.sampleRate);
 
