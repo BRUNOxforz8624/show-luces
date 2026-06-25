@@ -1,14 +1,31 @@
 let track = null;
 let audioContext = null;
 let luzEncendida = false;
-let soportaTorch = false;
+let linternaFunciona = false;
 const ESTADO_TXT = document.getElementById('estado');
 const BTN_CONECTAR = document.getElementById('btn-conectar');
+
+async function intentarLinterna(encendido) {
+    if (!track) return false;
+    for (const modo of [{ advanced: [{ torch: encendido }] }, { torch: encendido }]) {
+        try {
+            await track.applyConstraints(modo);
+            return true;
+        } catch (_) {}
+    }
+    return false;
+}
 
 BTN_CONECTAR.addEventListener('click', async () => {
     BTN_CONECTAR.disabled = true;
     BTN_CONECTAR.innerText = "CONECTANDO...";
     ESTADO_TXT.innerText = "Inicializando cámara...";
+
+    const linternaEl = document.createElement('div');
+    linternaEl.style.marginTop = '5px';
+    linternaEl.style.color = '#888';
+    linternaEl.style.fontSize = '14px';
+    document.body.appendChild(linternaEl);
 
     // 1. Cámara trasera y linterna
     try {
@@ -16,14 +33,12 @@ BTN_CONECTAR.addEventListener('click', async () => {
             video: { facingMode: { exact: "environment" } }
         });
         track = videoStream.getVideoTracks()[0];
-        const caps = track.getCapabilities();
-        soportaTorch = caps.torch || false;
-        ESTADO_TXT.innerText = soportaTorch
-            ? "Linterna lista. Escuchando..."
-            : "Sin linterna (solo pantalla). Escuchando...";
+        linternaFunciona = await intentarLinterna(true);
+        await intentarLinterna(false);
+        linternaEl.innerText = linternaFunciona ? "🔦 Linterna OK" : "⚠️ Sin linterna (solo pantalla)";
     } catch (e) {
         console.warn("Sin cámara trasera. Solo efecto pantalla.");
-        ESTADO_TXT.innerText = "Modo pantalla. Escuchando...";
+        linternaEl.innerText = "⚠️ Sin cámara trasera - solo pantalla";
     }
 
     // 2. Audio
@@ -44,13 +59,12 @@ BTN_CONECTAR.addEventListener('click', async () => {
         const FRECUENCIA = parseInt(new URLSearchParams(location.search).get('freq')) || 18000;
         const UMBRAL = 50;
 
-        // Buscar en un rango de bins alrededor de la frecuencia
         const indice = Math.round((FRECUENCIA * analyser.fftSize) / audioContext.sampleRate);
         const inicio = Math.max(0, indice - 2);
         const fin = Math.min(dataArray.length - 1, indice + 2);
 
         const nivelEl = document.createElement('div');
-        nivelEl.style.marginTop = '10px';
+        nivelEl.style.marginTop = '5px';
         nivelEl.style.color = '#888';
         nivelEl.style.fontSize = '14px';
         document.body.appendChild(nivelEl);
@@ -65,11 +79,18 @@ BTN_CONECTAR.addEventListener('click', async () => {
             }
 
             const detectado = maxV > UMBRAL;
-            nivelEl.innerText = `Nivel: ${maxV}/255 (umbral ${UMBRAL})`;
+            nivelEl.innerText = `Nivel: ${maxV}/255`;
 
             if (detectado !== luzEncendida) {
                 luzEncendida = detectado;
-                aplicarLuz(detectado);
+
+                document.body.style.backgroundColor = detectado ? "#fff" : "#111";
+                document.body.style.transition = "background-color 0.05s";
+
+                if (track && linternaFunciona) {
+                    intentarLinterna(detectado);
+                }
+
                 ESTADO_TXT.innerText = detectado
                     ? "✦ SEÑAL DETECTADA ✦"
                     : "✅ Escuchando...";
@@ -86,23 +107,3 @@ BTN_CONECTAR.addEventListener('click', async () => {
         console.error(e);
     }
 });
-
-async function aplicarLuz(encendido) {
-    document.body.style.backgroundColor = encendido ? "#ffffff" : "#111";
-    document.body.style.transition = "background-color 0.05s";
-
-    if (!track) return;
-
-    if (!soportaTorch) return;
-
-    try {
-        await track.applyConstraints({ advanced: [{ torch: encendido }] });
-    } catch (e) {
-        try {
-            await track.applyConstraints({ torch: encendido });
-        } catch (_) {
-            soportaTorch = false;
-            ESTADO_TXT.innerText = "Linterna no disponible";
-        }
-    }
-}
