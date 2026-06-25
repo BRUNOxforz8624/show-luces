@@ -30,9 +30,17 @@ BTN_CONECTAR.addEventListener('click', async () => {
     // 1. Cámara trasera y linterna
     try {
         const videoStream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: { ideal: "environment" } }
+            video: true
         });
         track = videoStream.getVideoTracks()[0];
+
+        // Consumir el stream en un video oculto (necesario para la linterna en algunos phones)
+        const videoEl = document.createElement('video');
+        videoEl.srcObject = videoStream;
+        videoEl.style.display = 'none';
+        document.body.appendChild(videoEl);
+        await videoEl.play();
+
         linternaFunciona = await intentarLinterna(true);
         await intentarLinterna(false);
         linternaEl.innerText = linternaFunciona ? "🔦 Linterna OK" : "⚠️ Sin linterna (solo pantalla)";
