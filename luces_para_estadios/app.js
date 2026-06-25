@@ -29,23 +29,31 @@ BTN_CONECTAR.addEventListener('click', async () => {
 
     // 1. Cámara trasera y linterna
     try {
+        // Buscar la cámara trasera específicamente
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const backCam = devices.find(d => d.kind === 'videoinput' && /back|environment|trasera/i.test(d.label));
         const videoStream = await navigator.mediaDevices.getUserMedia({
-            video: true
+            video: backCam ? { deviceId: { exact: backCam.deviceId } } : { facingMode: 'environment' }
         });
         track = videoStream.getVideoTracks()[0];
 
-        // Consumir el stream en un video oculto (necesario para la linterna en algunos phones)
+        // Consumir el stream en video oculto (necesario para linterna en algunos phones)
         const videoEl = document.createElement('video');
         videoEl.srcObject = videoStream;
         videoEl.style.display = 'none';
+        videoEl.setAttribute('playsinline', '');
+        videoEl.muted = true;
         document.body.appendChild(videoEl);
         await videoEl.play();
+
+        // Pequeña pausa para que el sensor se estabilice
+        await new Promise(r => setTimeout(r, 500));
 
         linternaFunciona = await intentarLinterna(true);
         await intentarLinterna(false);
         linternaEl.innerText = linternaFunciona ? "🔦 Linterna OK" : "⚠️ Sin linterna (solo pantalla)";
     } catch (e) {
-        console.warn("Sin cámara trasera. Solo efecto pantalla.");
+        console.warn("Sin cámara trasera. Solo efecto pantalla.", e);
         linternaEl.innerText = "⚠️ Sin cámara trasera - solo pantalla";
     }
 
