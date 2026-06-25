@@ -1,37 +1,39 @@
 let audioContext = null;
 let luzEncendida = false;
-let linternaLista = false;
+let linternaOk = false;
+let camId = null;
 let videoStream = null;
+let videoTrack = null;
 let videoEl = null;
 const ESTADO_TXT = document.getElementById('estado');
 const BTN_CONECTAR = document.getElementById('btn-conectar');
 
-async function iniciarCamara(conLinterna) {
-    if (videoStream) {
-        videoStream.getTracks().forEach(t => t.stop());
+async function encenderLinterna(on) {
+    if (!linternaOk) return;
+
+    // Método 1: applyConstraints directo
+    if (videoTrack && videoTrack.readyState === 'live') {
+        try {
+            await videoTrack.applyConstraints({ torch: on });
+            return;
+        } catch (_) {}
+        try {
+            await videoTrack.applyConstraints({ advanced: [{ torch: on }] });
+            return;
+        } catch (_) {}
     }
+
+    // Método 2: reiniciar cámara con torch
     try {
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        const backCam = devices.find(d => d.kind === 'videoinput' && /back|environment|trasera/i.test(d.label));
-        const constraints = { video: { torch: conLinterna } };
-        if (backCam) {
-            constraints.video.deviceId = { exact: backCam.deviceId };
-        } else {
-            constraints.video.facingMode = 'environment';
-        }
-        videoStream = await navigator.mediaDevices.getUserMedia(constraints);
-        if (!videoEl) {
-            videoEl = document.createElement('video');
-            videoEl.setAttribute('playsinline', '');
-            videoEl.muted = true;
-            videoEl.style.display = 'none';
-            document.body.appendChild(videoEl);
-        }
+        if (videoStream) videoStream.getTracks().forEach(t => t.stop());
+        const c = { video: { torch: on } };
+        if (camId) c.video.deviceId = { exact: camId };
+        videoStream = await navigator.mediaDevices.getUserMedia(c);
+        videoTrack = videoStream.getVideoTracks()[0];
         videoEl.srcObject = videoStream;
         await videoEl.play();
-        return true;
     } catch (_) {
-        return false;
+        linternaOk = false;
     }
 }
 
@@ -40,32 +42,59 @@ BTN_CONECTAR.addEventListener('click', async () => {
     BTN_CONECTAR.innerText = "CONECTANDO...";
     ESTADO_TXT.innerText = "Inicializando...";
 
-    const linternaEl = document.createElement('div');
-    linternaEl.style.marginTop = '5px';
-    linternaEl.style.color = '#888';
-    linternaEl.style.fontSize = '14px';
-    document.body.appendChild(linternaEl);
+    const infoEl = document.createElement('div');
+    infoEl.style.marginTop = '5px';
+    infoEl.style.color = '#888';
+    infoEl.style.fontSize = '14px';
+    document.body.appendChild(infoEl);
 
-    // 1. Iniciar cámara y probar linterna
+    // 1. Cámara
     try {
-        const ok = await iniciarCamara(true);
-        linternaLista = ok;
-        if (linternaLista) {
-            await iniciarCamara(false); // apagar linterna
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const bc = devices.find(d => d.kind === 'videoinput' && /back|environment|trasera/i.test(d.label));
+        if (bc) camId = bc.deviceId;
+
+        videoEl = document.createElement('video');
+        videoEl.setAttribute('playsinline', '');
+        videoEl.muted = true;
+        videoEl.style.display = 'none';
+        document.body.appendChild(videoEl);
+
+        const c = { video: {} };
+        if (camId) c.video.deviceId = { exact: camId };
+        else c.video.facingMode = 'environment';
+        videoStream = await navigator.mediaDevices.getUserMedia(c);
+        videoTrack = videoStream.getVideoTracks()[0];
+        videoEl.srcObject = videoStream;
+        await videoEl.play();
+
+        // Probar si la linterna funciona (método 1)
+        try {
+            await videoTrack.applyConstraints({ torch: true });
+            await videoTrack.applyConstraints({ torch: false });
+            linternaOk = true;
+        } catch (_) {
+            // Probar método 2
+            try {
+                let s = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: camId }, torch: true } });
+                s.getTracks().forEach(t => t.stop());
+                linternaOk = true;
+            } catch (_2) {
+                linternaOk = false;
+            }
         }
-        linternaEl.innerText = linternaLista ? "🔦 Linterna OK" : "⚠️ Sin linterna (solo pantalla)";
+
+        infoEl.innerText = linternaOk ? "🔦 Linterna OK" : "⚠️ Sin linterna (solo pantalla)";
     } catch (e) {
-        console.warn("Sin cámara.", e);
-        linternaEl.innerText = "⚠️ Sin cámara - solo pantalla";
+        console.warn("Error cámara:", e);
+        infoEl.innerText = "⚠️ Sin cámara - solo pantalla";
     }
 
     // 2. Audio
     try {
         const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        if (audioContext.state === 'suspended') {
-            await audioContext.resume();
-        }
+        if (audioContext.state === 'suspended') await audioContext.resume();
 
         const source = audioContext.createMediaStreamSource(audioStream);
         const analyser = audioContext.createAnalyser();
@@ -73,13 +102,11 @@ BTN_CONECTAR.addEventListener('click', async () => {
         source.connect(analyser);
 
         const dataArray = new Uint8Array(analyser.frequencyBinCount);
-
         const FRECUENCIA = parseInt(new URLSearchParams(location.search).get('freq')) || 18000;
         const UMBRAL = 50;
-
-        const indice = Math.round((FRECUENCIA * analyser.fftSize) / audioContext.sampleRate);
-        const inicio = Math.max(0, indice - 2);
-        const fin = Math.min(dataArray.length - 1, indice + 2);
+        const idx = Math.round((FRECUENCIA * analyser.fftSize) / audioContext.sampleRate);
+        const inicio = Math.max(0, idx - 2);
+        const fin = Math.min(dataArray.length - 1, idx + 2);
 
         const nivelEl = document.createElement('div');
         nivelEl.style.marginTop = '5px';
@@ -87,39 +114,29 @@ BTN_CONECTAR.addEventListener('click', async () => {
         nivelEl.style.fontSize = '14px';
         document.body.appendChild(nivelEl);
 
-        let frameId;
         function analizar() {
             analyser.getByteFrequencyData(dataArray);
-
             let maxV = 0;
-            for (let i = inicio; i <= fin; i++) {
-                if (dataArray[i] > maxV) maxV = dataArray[i];
-            }
-
+            for (let i = inicio; i <= fin; i++) if (dataArray[i] > maxV) maxV = dataArray[i];
             const detectado = maxV > UMBRAL;
             nivelEl.innerText = `Nivel: ${maxV}/255`;
 
             if (detectado !== luzEncendida) {
                 luzEncendida = detectado;
-
                 document.body.style.backgroundColor = detectado ? "#fff" : "#111";
                 document.body.style.transition = "background-color 0.05s";
+                ESTADO_TXT.innerText = detectado ? "✦ SEÑAL DETECTADA ✦" : "✅ Escuchando...";
 
-                if (linternaLista) {
-                    iniciarCamara(detectado);
+                if (linternaOk) {
+                    // No esperar, lanzar en segundo plano
+                    encenderLinterna(detectado);
                 }
-
-                ESTADO_TXT.innerText = detectado
-                    ? "✦ SEÑAL DETECTADA ✦"
-                    : "✅ Escuchando...";
             }
-
-            frameId = requestAnimationFrame(analizar);
+            requestAnimationFrame(analizar);
         }
 
         ESTADO_TXT.innerText = "✅ Escuchando...";
         analizar();
-
     } catch (e) {
         ESTADO_TXT.innerText = "❌ Error al acceder al micrófono.";
         console.error(e);
