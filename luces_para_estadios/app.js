@@ -41,21 +41,31 @@ BTN_CONECTAR.addEventListener('click', async () => {
 
         const dataArray = new Uint8Array(analyser.frequencyBinCount);
 
-        // Frecuencia desde URL (?freq=18000), default 18,000 Hz
         const FRECUENCIA = parseInt(new URLSearchParams(location.search).get('freq')) || 18000;
-        const UMBRAL = 100;
+        const UMBRAL = 50;
+
+        // Buscar en un rango de bins alrededor de la frecuencia
         const indice = Math.round((FRECUENCIA * analyser.fftSize) / audioContext.sampleRate);
+        const inicio = Math.max(0, indice - 2);
+        const fin = Math.min(dataArray.length - 1, indice + 2);
+
+        const nivelEl = document.createElement('div');
+        nivelEl.style.marginTop = '10px';
+        nivelEl.style.color = '#888';
+        nivelEl.style.fontSize = '14px';
+        document.body.appendChild(nivelEl);
 
         let frameId;
-        let ultimoEstado = 0;
         function analizar() {
             analyser.getByteFrequencyData(dataArray);
-            const v = dataArray[indice];
-            const detectado = v > UMBRAL;
 
-            if (v > ultimoEstado + 5 || v < ultimoEstado - 5) {
-                ultimoEstado = v;
+            let maxV = 0;
+            for (let i = inicio; i <= fin; i++) {
+                if (dataArray[i] > maxV) maxV = dataArray[i];
             }
+
+            const detectado = maxV > UMBRAL;
+            nivelEl.innerText = `Nivel: ${maxV}/255 (umbral ${UMBRAL})`;
 
             if (detectado !== luzEncendida) {
                 luzEncendida = detectado;
