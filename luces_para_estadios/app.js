@@ -91,11 +91,18 @@ async function aplicarLuz(encendido) {
     document.body.style.backgroundColor = encendido ? "#ffffff" : "#111";
     document.body.style.transition = "background-color 0.05s";
 
-    if (track && soportaTorch) {
+    if (!track) return;
+
+    if (!soportaTorch) return;
+
+    try {
+        await track.applyConstraints({ advanced: [{ torch: encendido }] });
+    } catch (e) {
         try {
-            await track.applyConstraints({
-                advanced: [{ torch: encendido }]
-            });
-        } catch (_) { }
+            await track.applyConstraints({ torch: encendido });
+        } catch (_) {
+            soportaTorch = false;
+            ESTADO_TXT.innerText = "Linterna no disponible";
+        }
     }
 }
