@@ -1,25 +1,44 @@
-let track = null;
 let audioContext = null;
 let luzEncendida = false;
-let linternaFunciona = false;
+let linternaLista = false;
+let videoStream = null;
+let videoEl = null;
 const ESTADO_TXT = document.getElementById('estado');
 const BTN_CONECTAR = document.getElementById('btn-conectar');
 
-async function intentarLinterna(encendido) {
-    if (!track) return false;
-    for (const modo of [{ advanced: [{ torch: encendido }] }, { torch: encendido }]) {
-        try {
-            await track.applyConstraints(modo);
-            return true;
-        } catch (_) {}
+async function iniciarCamara(conLinterna) {
+    if (videoStream) {
+        videoStream.getTracks().forEach(t => t.stop());
     }
-    return false;
+    try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const backCam = devices.find(d => d.kind === 'videoinput' && /back|environment|trasera/i.test(d.label));
+        const constraints = { video: { torch: conLinterna } };
+        if (backCam) {
+            constraints.video.deviceId = { exact: backCam.deviceId };
+        } else {
+            constraints.video.facingMode = 'environment';
+        }
+        videoStream = await navigator.mediaDevices.getUserMedia(constraints);
+        if (!videoEl) {
+            videoEl = document.createElement('video');
+            videoEl.setAttribute('playsinline', '');
+            videoEl.muted = true;
+            videoEl.style.display = 'none';
+            document.body.appendChild(videoEl);
+        }
+        videoEl.srcObject = videoStream;
+        await videoEl.play();
+        return true;
+    } catch (_) {
+        return false;
+    }
 }
 
 BTN_CONECTAR.addEventListener('click', async () => {
     BTN_CONECTAR.disabled = true;
     BTN_CONECTAR.innerText = "CONECTANDO...";
-    ESTADO_TXT.innerText = "Inicializando cámara...";
+    ESTADO_TXT.innerText = "Inicializando...";
 
     const linternaEl = document.createElement('div');
     linternaEl.style.marginTop = '5px';
@@ -27,34 +46,17 @@ BTN_CONECTAR.addEventListener('click', async () => {
     linternaEl.style.fontSize = '14px';
     document.body.appendChild(linternaEl);
 
-    // 1. Cámara trasera y linterna
+    // 1. Iniciar cámara y probar linterna
     try {
-        // Buscar la cámara trasera específicamente
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        const backCam = devices.find(d => d.kind === 'videoinput' && /back|environment|trasera/i.test(d.label));
-        const videoStream = await navigator.mediaDevices.getUserMedia({
-            video: backCam ? { deviceId: { exact: backCam.deviceId } } : { facingMode: 'environment' }
-        });
-        track = videoStream.getVideoTracks()[0];
-
-        // Consumir el stream en video oculto (necesario para linterna en algunos phones)
-        const videoEl = document.createElement('video');
-        videoEl.srcObject = videoStream;
-        videoEl.style.display = 'none';
-        videoEl.setAttribute('playsinline', '');
-        videoEl.muted = true;
-        document.body.appendChild(videoEl);
-        await videoEl.play();
-
-        // Pequeña pausa para que el sensor se estabilice
-        await new Promise(r => setTimeout(r, 500));
-
-        linternaFunciona = await intentarLinterna(true);
-        await intentarLinterna(false);
-        linternaEl.innerText = linternaFunciona ? "🔦 Linterna OK" : "⚠️ Sin linterna (solo pantalla)";
+        const ok = await iniciarCamara(true);
+        linternaLista = ok;
+        if (linternaLista) {
+            await iniciarCamara(false); // apagar linterna
+        }
+        linternaEl.innerText = linternaLista ? "🔦 Linterna OK" : "⚠️ Sin linterna (solo pantalla)";
     } catch (e) {
-        console.warn("Sin cámara trasera. Solo efecto pantalla.", e);
-        linternaEl.innerText = "⚠️ Sin cámara trasera - solo pantalla";
+        console.warn("Sin cámara.", e);
+        linternaEl.innerText = "⚠️ Sin cámara - solo pantalla";
     }
 
     // 2. Audio
@@ -103,8 +105,8 @@ BTN_CONECTAR.addEventListener('click', async () => {
                 document.body.style.backgroundColor = detectado ? "#fff" : "#111";
                 document.body.style.transition = "background-color 0.05s";
 
-                if (track && linternaFunciona) {
-                    intentarLinterna(detectado);
+                if (linternaLista) {
+                    iniciarCamara(detectado);
                 }
 
                 ESTADO_TXT.innerText = detectado
